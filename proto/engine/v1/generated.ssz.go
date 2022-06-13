@@ -688,6 +688,192 @@ func (e *ExecutionPayloadHeader) HashTreeRootWith(hh *ssz.Hasher) (err error) {
 	return
 }
 
+// MarshalSSZ ssz marshals the BlobsBundle object
+func (b *BlobsBundle) MarshalSSZ() ([]byte, error) {
+	return ssz.MarshalSSZ(b)
+}
+
+// MarshalSSZTo ssz marshals the BlobsBundle object to a target array
+func (b *BlobsBundle) MarshalSSZTo(buf []byte) (dst []byte, err error) {
+	dst = buf
+	offset := int(40)
+
+	// Field (0) 'BlockHash'
+	if len(b.BlockHash) != 32 {
+		err = ssz.ErrBytesLength
+		return
+	}
+	dst = append(dst, b.BlockHash...)
+
+	// Offset (1) 'Kzgs'
+	dst = ssz.WriteOffset(dst, offset)
+	offset += len(b.Kzgs) * 48
+
+	// Offset (2) 'Blobs'
+	dst = ssz.WriteOffset(dst, offset)
+	offset += len(b.Blobs) * 131072
+
+	// Field (1) 'Kzgs'
+	if len(b.Kzgs) > 16 {
+		err = ssz.ErrListTooBig
+		return
+	}
+	for ii := 0; ii < len(b.Kzgs); ii++ {
+		if len(b.Kzgs[ii]) != 48 {
+			err = ssz.ErrBytesLength
+			return
+		}
+		dst = append(dst, b.Kzgs[ii]...)
+	}
+
+	// Field (2) 'Blobs'
+	if len(b.Blobs) > 16 {
+		err = ssz.ErrListTooBig
+		return
+	}
+	for ii := 0; ii < len(b.Blobs); ii++ {
+		if dst, err = b.Blobs[ii].MarshalSSZTo(dst); err != nil {
+			return
+		}
+	}
+
+	return
+}
+
+// UnmarshalSSZ ssz unmarshals the BlobsBundle object
+func (b *BlobsBundle) UnmarshalSSZ(buf []byte) error {
+	var err error
+	size := uint64(len(buf))
+	if size < 40 {
+		return ssz.ErrSize
+	}
+
+	tail := buf
+	var o1, o2 uint64
+
+	// Field (0) 'BlockHash'
+	if cap(b.BlockHash) == 0 {
+		b.BlockHash = make([]byte, 0, len(buf[0:32]))
+	}
+	b.BlockHash = append(b.BlockHash, buf[0:32]...)
+
+	// Offset (1) 'Kzgs'
+	if o1 = ssz.ReadOffset(buf[32:36]); o1 > size {
+		return ssz.ErrOffset
+	}
+
+	if o1 < 40 {
+		return ssz.ErrInvalidVariableOffset
+	}
+
+	// Offset (2) 'Blobs'
+	if o2 = ssz.ReadOffset(buf[36:40]); o2 > size || o1 > o2 {
+		return ssz.ErrOffset
+	}
+
+	// Field (1) 'Kzgs'
+	{
+		buf = tail[o1:o2]
+		num, err := ssz.DivideInt2(len(buf), 48, 16)
+		if err != nil {
+			return err
+		}
+		b.Kzgs = make([][]byte, num)
+		for ii := 0; ii < num; ii++ {
+			if cap(b.Kzgs[ii]) == 0 {
+				b.Kzgs[ii] = make([]byte, 0, len(buf[ii*48:(ii+1)*48]))
+			}
+			b.Kzgs[ii] = append(b.Kzgs[ii], buf[ii*48:(ii+1)*48]...)
+		}
+	}
+
+	// Field (2) 'Blobs'
+	{
+		buf = tail[o2:]
+		num, err := ssz.DivideInt2(len(buf), 131072, 16)
+		if err != nil {
+			return err
+		}
+		b.Blobs = make([]*Blob, num)
+		for ii := 0; ii < num; ii++ {
+			if b.Blobs[ii] == nil {
+				b.Blobs[ii] = new(Blob)
+			}
+			if err = b.Blobs[ii].UnmarshalSSZ(buf[ii*131072 : (ii+1)*131072]); err != nil {
+				return err
+			}
+		}
+	}
+	return err
+}
+
+// SizeSSZ returns the ssz encoded size in bytes for the BlobsBundle object
+func (b *BlobsBundle) SizeSSZ() (size int) {
+	size = 40
+
+	// Field (1) 'Kzgs'
+	size += len(b.Kzgs) * 48
+
+	// Field (2) 'Blobs'
+	size += len(b.Blobs) * 131072
+
+	return
+}
+
+// HashTreeRoot ssz hashes the BlobsBundle object
+func (b *BlobsBundle) HashTreeRoot() ([32]byte, error) {
+	return ssz.HashWithDefaultHasher(b)
+}
+
+// HashTreeRootWith ssz hashes the BlobsBundle object with a hasher
+func (b *BlobsBundle) HashTreeRootWith(hh *ssz.Hasher) (err error) {
+	indx := hh.Index()
+
+	// Field (0) 'BlockHash'
+	if len(b.BlockHash) != 32 {
+		err = ssz.ErrBytesLength
+		return
+	}
+	hh.PutBytes(b.BlockHash)
+
+	// Field (1) 'Kzgs'
+	{
+		if len(b.Kzgs) > 16 {
+			err = ssz.ErrListTooBig
+			return
+		}
+		subIndx := hh.Index()
+		for _, i := range b.Kzgs {
+			if len(i) != 48 {
+				err = ssz.ErrBytesLength
+				return
+			}
+			hh.PutBytes(i)
+		}
+		numItems := uint64(len(b.Kzgs))
+		hh.MerkleizeWithMixin(subIndx, numItems, ssz.CalculateLimit(16, numItems, 0))
+	}
+
+	// Field (2) 'Blobs'
+	{
+		subIndx := hh.Index()
+		num := uint64(len(b.Blobs))
+		if num > 16 {
+			err = ssz.ErrIncorrectListSize
+			return
+		}
+		for _, elem := range b.Blobs {
+			if err = elem.HashTreeRootWith(hh); err != nil {
+				return
+			}
+		}
+		hh.MerkleizeWithMixin(subIndx, num, 16)
+	}
+
+	hh.Merkleize(indx)
+	return
+}
+
 // MarshalSSZ ssz marshals the Blob object
 func (b *Blob) MarshalSSZ() ([]byte, error) {
 	return ssz.MarshalSSZ(b)
