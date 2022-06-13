@@ -15,12 +15,12 @@ func TxPeekBlobVersionedHashes(tx []byte) ([][32]byte, error) {
 	if tx[0] != types.BlobTxType {
 		return nil, errInvalidBlobTxType
 	}
-	sbt := types.SignedBlobTx{}
-	if err := sbt.Deserialize(codec.NewDecodingReader(bytes.NewReader(tx[1:]), uint64(len(tx)-1))); err != nil {
+	bt := types.BlobTxWrapper{}
+	if err := bt.Deserialize(codec.NewDecodingReader(bytes.NewReader(tx[1:]), uint64(len(tx)-1))); err != nil {
 		return nil, err
 	}
-	hashes := make([][32]byte, len(sbt.Message.BlobVersionedHashes))
-	for _, b := range sbt.Message.BlobVersionedHashes {
+	hashes := make([][32]byte, len(bt.Tx.Message.BlobVersionedHashes))
+	for _, b := range bt.Tx.Message.BlobVersionedHashes {
 		var hash [32]byte
 		copy(hash[:], b[:])
 		hashes = append(hashes, hash)
