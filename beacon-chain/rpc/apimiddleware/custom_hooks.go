@@ -413,6 +413,11 @@ type bellatrixBlockResponseJson struct {
 	Data    *signedBeaconBlockBellatrixContainerJson `json:"data"`
 }
 
+type eip4844BlockResponseJson struct {
+	Version string                                 `json:"version"`
+	Data    *signedBeaconBlockEip4844ContainerJson `json:"data"`
+}
+
 func serializeV2Block(response interface{}) (apimiddleware.RunDefault, []byte, apimiddleware.ErrorJson) {
 	respContainer, ok := response.(*blockV2ResponseJson)
 	if !ok {
@@ -445,6 +450,14 @@ func serializeV2Block(response interface{}) (apimiddleware.RunDefault, []byte, a
 				Signature: respContainer.Data.Signature,
 			},
 		}
+	case strings.EqualFold(respContainer.Version, strings.ToLower(ethpbv2.Version_EIP4844.String())):
+		actualRespContainer = &eip4844BlockResponseJson{
+			Version: respContainer.Version,
+			Data: &signedBeaconBlockEip4844ContainerJson{
+				Message:   respContainer.Data.Eip4844Block,
+				Signature: respContainer.Data.Signature,
+			},
+		}
 	default:
 		return false, nil, apimiddleware.InternalServerError(fmt.Errorf("unsupported block version '%s'", respContainer.Version))
 	}
@@ -471,6 +484,11 @@ type bellatrixStateResponseJson struct {
 	Data    *beaconStateBellatrixJson `json:"data"`
 }
 
+type eip4844StateResponseJson struct {
+	Version string                  `json:"version"`
+	Data    *beaconStateEip4844Json `json:"data"`
+}
+
 func serializeV2State(response interface{}) (apimiddleware.RunDefault, []byte, apimiddleware.ErrorJson) {
 	respContainer, ok := response.(*beaconStateV2ResponseJson)
 	if !ok {
@@ -493,6 +511,11 @@ func serializeV2State(response interface{}) (apimiddleware.RunDefault, []byte, a
 		actualRespContainer = &bellatrixStateResponseJson{
 			Version: respContainer.Version,
 			Data:    respContainer.Data.BellatrixState,
+		}
+	case strings.EqualFold(respContainer.Version, strings.ToLower(ethpbv2.Version_EIP4844.String())):
+		actualRespContainer = &eip4844StateResponseJson{
+			Version: respContainer.Version,
+			Data:    respContainer.Data.Eip4844State,
 		}
 	default:
 		return false, nil, apimiddleware.InternalServerError(fmt.Errorf("unsupported state version '%s'", respContainer.Version))
@@ -525,6 +548,16 @@ type bellatrixProduceBlindedBlockResponseJson struct {
 	Data    *blindedBeaconBlockBellatrixJson `json:"data"`
 }
 
+type eip4844ProduceBlockResponseJson struct {
+	Version string                  `json:"version"`
+	Data    *beaconBlockEip4844Json `json:"data"`
+}
+
+type eip4844ProduceBlindedBlockResponseJson struct {
+	Version string                         `json:"version"`
+	Data    *blindedBeaconBlockEip4844Json `json:"data"`
+}
+
 func serializeProducedV2Block(response interface{}) (apimiddleware.RunDefault, []byte, apimiddleware.ErrorJson) {
 	respContainer, ok := response.(*produceBlockResponseV2Json)
 	if !ok {
@@ -547,6 +580,11 @@ func serializeProducedV2Block(response interface{}) (apimiddleware.RunDefault, [
 		actualRespContainer = &bellatrixProduceBlockResponseJson{
 			Version: respContainer.Version,
 			Data:    respContainer.Data.BellatrixBlock,
+		}
+	case strings.EqualFold(respContainer.Version, strings.ToLower(ethpbv2.Version_BELLATRIX.String())):
+		actualRespContainer = &eip4844ProduceBlockResponseJson{
+			Version: respContainer.Version,
+			Data:    respContainer.Data.Eip4844Block,
 		}
 	default:
 		return false, nil, apimiddleware.InternalServerError(fmt.Errorf("unsupported block version '%s'", respContainer.Version))
@@ -581,6 +619,11 @@ func serializeProducedBlindedBlock(response interface{}) (apimiddleware.RunDefau
 		actualRespContainer = &bellatrixProduceBlindedBlockResponseJson{
 			Version: respContainer.Version,
 			Data:    respContainer.Data.BellatrixBlock,
+		}
+	case strings.EqualFold(respContainer.Version, strings.ToLower(ethpbv2.Version_EIP4844.String())):
+		actualRespContainer = &eip4844ProduceBlindedBlockResponseJson{
+			Version: respContainer.Version,
+			Data:    respContainer.Data.Eip4844Block,
 		}
 	default:
 		return false, nil, apimiddleware.InternalServerError(fmt.Errorf("unsupported block version '%s'", respContainer.Version))
