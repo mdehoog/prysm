@@ -106,6 +106,18 @@ func (ds *Server) GetBeaconStateV2(ctx context.Context, req *ethpbv2.StateReques
 			},
 			ExecutionOptimistic: isOptimistic,
 		}, nil
+	case version.EIP4844:
+		protoState, err := migration.BeaconStateEip4844ToProto(beaconSt)
+		if err != nil {
+			return nil, status.Errorf(codes.Internal, "Could not convert state to proto: %v", err)
+		}
+		return &ethpbv2.BeaconStateResponseV2{
+			Version: ethpbv2.Version_EIP4844,
+			Data: &ethpbv2.BeaconStateContainer{
+				State: &ethpbv2.BeaconStateContainer_Eip4844State{Eip4844State: protoState},
+			},
+			ExecutionOptimistic: isOptimistic,
+		}, nil
 	default:
 		return nil, status.Error(codes.Internal, "Unsupported state version")
 	}
@@ -133,6 +145,8 @@ func (ds *Server) GetBeaconStateSSZV2(ctx context.Context, req *ethpbv2.StateReq
 		ver = ethpbv2.Version_ALTAIR
 	case version.Bellatrix:
 		ver = ethpbv2.Version_BELLATRIX
+	case version.EIP4844:
+		ver = ethpbv2.Version_EIP4844
 	default:
 		return nil, status.Error(codes.Internal, "Unsupported state version")
 	}
