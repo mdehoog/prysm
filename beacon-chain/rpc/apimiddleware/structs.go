@@ -410,6 +410,11 @@ type signedBeaconBlockEip4844ContainerJson struct {
 	Signature string                  `json:"signature" hex:"true"`
 }
 
+type signedBlindedBeaconBlockEip4844ContainerJson struct {
+	Message   *blindedBeaconBlockEip4844Json `json:"message"`
+	Signature string                         `json:"signature" hex:"true"`
+}
+
 type beaconBlockAltairJson struct {
 	Slot          string                     `json:"slot"`
 	ProposerIndex string                     `json:"proposer_index"`

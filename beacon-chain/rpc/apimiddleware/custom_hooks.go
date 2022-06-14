@@ -215,6 +215,16 @@ type bellatrixPublishBlindedBlockRequestJson struct {
 	Signature      string                           `json:"signature" hex:"true"`
 }
 
+type eip4844PublishBlockRequestJson struct {
+	Eip4844Block *beaconBlockEip4844Json `json:"eip4844_block"`
+	Signature    string                  `json:"signature" hex:"true"`
+}
+
+type eip4844PublishBlindedBlockRequestJson struct {
+	Eip4844Block *blindedBeaconBlockEip4844Json `json:"eip4844_block"`
+	Signature    string                         `json:"signature" hex:"true"`
+}
+
 // setInitialPublishBlockPostRequest is triggered before we deserialize the request JSON into a struct.
 // We don't know which version of the block got posted, but we can determine it from the slot.
 // We know that blocks of all versions have a Message field with a Slot field,
@@ -246,8 +256,10 @@ func setInitialPublishBlockPostRequest(endpoint *apimiddleware.Endpoint,
 		endpoint.PostRequest = &signedBeaconBlockContainerJson{}
 	} else if currentEpoch < params.BeaconConfig().BellatrixForkEpoch {
 		endpoint.PostRequest = &signedBeaconBlockAltairContainerJson{}
-	} else {
+	} else if currentEpoch < params.BeaconConfig().Eip4844ForkEpoch {
 		endpoint.PostRequest = &signedBeaconBlockBellatrixContainerJson{}
+	} else {
+		endpoint.PostRequest = &signedBeaconBlockEip4844ContainerJson{}
 	}
 	req.Body = io.NopCloser(bytes.NewBuffer(buf))
 	return true, nil
@@ -281,6 +293,15 @@ func preparePublishedBlock(endpoint *apimiddleware.Endpoint, _ http.ResponseWrit
 		actualPostReq := &bellatrixPublishBlockRequestJson{
 			BellatrixBlock: block.Message,
 			Signature:      block.Signature,
+		}
+		endpoint.PostRequest = actualPostReq
+		return nil
+	}
+	if block, ok := endpoint.PostRequest.(*signedBeaconBlockEip4844ContainerJson); ok {
+		// Prepare post request that can be properly decoded on gRPC side.
+		actualPostReq := &eip4844PublishBlockRequestJson{
+			Eip4844Block: block.Message,
+			Signature:    block.Signature,
 		}
 		endpoint.PostRequest = actualPostReq
 		return nil
@@ -319,8 +340,10 @@ func setInitialPublishBlindedBlockPostRequest(endpoint *apimiddleware.Endpoint,
 		endpoint.PostRequest = &signedBeaconBlockContainerJson{}
 	} else if currentEpoch < params.BeaconConfig().BellatrixForkEpoch {
 		endpoint.PostRequest = &signedBeaconBlockAltairContainerJson{}
-	} else {
+	} else if currentEpoch < params.BeaconConfig().Eip4844ForkEpoch {
 		endpoint.PostRequest = &signedBlindedBeaconBlockBellatrixContainerJson{}
+	} else {
+		endpoint.PostRequest = &signedBlindedBeaconBlockEip4844ContainerJson{}
 	}
 	req.Body = ioutil.NopCloser(bytes.NewBuffer(buf))
 	return true, nil
@@ -354,6 +377,15 @@ func preparePublishedBlindedBlock(endpoint *apimiddleware.Endpoint, _ http.Respo
 		actualPostReq := &bellatrixPublishBlindedBlockRequestJson{
 			BellatrixBlock: block.Message,
 			Signature:      block.Signature,
+		}
+		endpoint.PostRequest = actualPostReq
+		return nil
+	}
+	if block, ok := endpoint.PostRequest.(*signedBlindedBeaconBlockEip4844ContainerJson); ok {
+		// Prepare post request that can be properly decoded on gRPC side.
+		actualPostReq := &eip4844PublishBlindedBlockRequestJson{
+			Eip4844Block: block.Message,
+			Signature:    block.Signature,
 		}
 		endpoint.PostRequest = actualPostReq
 		return nil
