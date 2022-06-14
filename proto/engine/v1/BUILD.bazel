@@ -34,7 +34,6 @@ ssz_gen_marshal(
     objs = [
         "ExecutionPayload",
         "ExecutionPayloadHeader",
-        "BlobsBundle",
         "Blob",
     ],
 )
