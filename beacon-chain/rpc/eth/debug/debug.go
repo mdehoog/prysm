@@ -94,27 +94,19 @@ func (ds *Server) GetBeaconStateV2(ctx context.Context, req *ethpbv2.StateReques
 			},
 			ExecutionOptimistic: isOptimistic,
 		}, nil
-	case version.Bellatrix:
+	case version.Bellatrix, version.EIP4844:
 		protoState, err := migration.BeaconStateBellatrixToProto(beaconSt)
 		if err != nil {
 			return nil, status.Errorf(codes.Internal, "Could not convert state to proto: %v", err)
 		}
-		return &ethpbv2.BeaconStateResponseV2{
-			Version: ethpbv2.Version_BELLATRIX,
-			Data: &ethpbv2.BeaconStateContainer{
-				State: &ethpbv2.BeaconStateContainer_BellatrixState{BellatrixState: protoState},
-			},
-			ExecutionOptimistic: isOptimistic,
-		}, nil
-	case version.EIP4844:
-		protoState, err := migration.BeaconStateEip4844ToProto(beaconSt)
-		if err != nil {
-			return nil, status.Errorf(codes.Internal, "Could not convert state to proto: %v", err)
+		v := ethpbv2.Version_BELLATRIX
+		if beaconSt.Version() == version.EIP4844 {
+			v = ethpbv2.Version_EIP4844
 		}
 		return &ethpbv2.BeaconStateResponseV2{
-			Version: ethpbv2.Version_EIP4844,
+			Version: v,
 			Data: &ethpbv2.BeaconStateContainer{
-				State: &ethpbv2.BeaconStateContainer_Eip4844State{Eip4844State: protoState},
+				State: &ethpbv2.BeaconStateContainer_BellatrixState{BellatrixState: protoState},
 			},
 			ExecutionOptimistic: isOptimistic,
 		}, nil
