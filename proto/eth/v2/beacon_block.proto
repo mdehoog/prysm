@@ -58,7 +58,7 @@ message SignedBeaconBlockContainerV2 {
   }
 
   // 96 byte BLS signature from the validator that produced this block.
-  bytes signature = 100 [(ethereum.eth.ext.ssz_size) = "96"];
+  bytes signature = 5 [(ethereum.eth.ext.ssz_size) = "96"];
 }
 
 message BlindedBeaconBlockContainer {
@@ -79,7 +79,7 @@ message SignedBlindedBeaconBlockContainer {
   }
 
   // 96 byte BLS signature from the validator that produced this block.
-  bytes signature = 100 [(ethereum.eth.ext.ssz_size) = "96"];
+  bytes signature = 5 [(ethereum.eth.ext.ssz_size) = "96"];
 }
 
 message SignedBeaconBlockBellatrix {
