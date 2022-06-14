@@ -78,6 +78,20 @@ func V1Alpha1BeaconBlockBellatrixToV2(v1alpha1Block *ethpbalpha.BeaconBlockBella
 	return v2Block, nil
 }
 
+// V1Alpha1BeaconBlockEip4844ToV2 converts a v1alpha1 EIP-4844 beacon block to a v2
+// EIP-4844 block.
+func V1Alpha1BeaconBlockEip4844ToV2(v1alpha1Block *ethpbalpha.BeaconBlockWithBlobKZGs) (*ethpbv2.BeaconBlockEip4844, error) {
+	marshaledBlk, err := proto.Marshal(v1alpha1Block)
+	if err != nil {
+		return nil, errors.Wrap(err, "could not marshal block")
+	}
+	v2Block := &ethpbv2.BeaconBlockEip4844{}
+	if err := proto.Unmarshal(marshaledBlk, v2Block); err != nil {
+		return nil, errors.Wrap(err, "could not unmarshal block")
+	}
+	return v2Block, nil
+}
+
 // V1Alpha1BeaconBlockBellatrixToV2Blinded converts a v1alpha1 Bellatrix beacon block to a v2
 // blinded Bellatrix block.
 func V1Alpha1BeaconBlockBellatrixToV2Blinded(v1alpha1Block *ethpbalpha.BeaconBlockBellatrix) (*ethpbv2.BlindedBeaconBlockBellatrix, error) {
