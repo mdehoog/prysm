@@ -581,7 +581,7 @@ func serializeProducedV2Block(response interface{}) (apimiddleware.RunDefault, [
 			Version: respContainer.Version,
 			Data:    respContainer.Data.BellatrixBlock,
 		}
-	case strings.EqualFold(respContainer.Version, strings.ToLower(ethpbv2.Version_BELLATRIX.String())):
+	case strings.EqualFold(respContainer.Version, strings.ToLower(ethpbv2.Version_EIP4844.String())):
 		actualRespContainer = &eip4844ProduceBlockResponseJson{
 			Version: respContainer.Version,
 			Data:    respContainer.Data.Eip4844Block,
