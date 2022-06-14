@@ -499,6 +499,7 @@ type beaconBlockBodyEip4844Json struct {
 	VoluntaryExits    []*signedVoluntaryExitJson `json:"voluntary_exits"`
 	SyncAggregate     *syncAggregateJson         `json:"sync_aggregate"`
 	ExecutionPayload  *executionPayloadJson      `json:"execution_payload"`
+	BlobKzgs          []string                   `json:"blob_kzgs" hex:"true"`
 }
 
 type blindedBeaconBlockBodyEip4844Json struct {
@@ -512,6 +513,7 @@ type blindedBeaconBlockBodyEip4844Json struct {
 	VoluntaryExits         []*signedVoluntaryExitJson  `json:"voluntary_exits"`
 	SyncAggregate          *syncAggregateJson          `json:"sync_aggregate"`
 	ExecutionPayloadHeader *executionPayloadHeaderJson `json:"execution_payload_header"`
+	BlobKzgs               []string                    `json:"blob_kzgs" hex:"true"`
 }
 
 type executionPayloadJson struct {

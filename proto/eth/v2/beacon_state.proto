@@ -172,7 +172,7 @@ message BeaconStateEip4844 {
   engine.v1.ExecutionPayloadHeader latest_execution_payload_header = 10001;
 
   // EIP-4844 fields [11001-12000]
-  // TODO
+  repeated bytes blob_kzgs = 11001 [(ethereum.eth.ext.ssz_size) = "?,48", (ethereum.eth.ext.ssz_max)  = "16777216"];
 }
 
 message StateRequestV2 {
