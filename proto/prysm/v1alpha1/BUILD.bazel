@@ -63,6 +63,8 @@ ssz_gen_marshal(
         "BeaconBlockBellatrix",
         "BeaconBlockBodyBellatrix",
         "SignedBeaconBlockBellatrix",
+        "BeaconBlockWithBlobKZGs",
+        "SignedBeaconBlockWithBlobKZGs",
         "SyncAggregate",
         "SyncCommitteeMessage",
         "SyncCommitteeContribution",
