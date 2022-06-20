@@ -366,6 +366,7 @@ func TestSetInitialPublishBlockPostRequest(t *testing.T) {
 	params.SetupTestConfigCleanup(t)
 	cfg := params.BeaconConfig().Copy()
 	cfg.BellatrixForkEpoch = params.BeaconConfig().AltairForkEpoch + 1
+	cfg.Eip4844ForkEpoch = params.BeaconConfig().BellatrixForkEpoch + 1
 	params.OverrideBeaconConfig(cfg)
 
 	endpoint := &apimiddleware.Endpoint{}
@@ -417,6 +418,21 @@ func TestSetInitialPublishBlockPostRequest(t *testing.T) {
 		assert.Equal(t, apimiddleware.RunDefault(true), runDefault)
 		assert.Equal(t, reflect.TypeOf(signedBeaconBlockBellatrixContainerJson{}).Name(), reflect.Indirect(reflect.ValueOf(endpoint.PostRequest)).Type().Name())
 	})
+	t.Run("EIP-4844", func(t *testing.T) {
+		slot, err := slots.EpochStart(params.BeaconConfig().Eip4844ForkEpoch)
+		require.NoError(t, err)
+		s.Message = struct{ Slot string }{Slot: strconv.FormatUint(uint64(slot), 10)}
+		j, err := json.Marshal(s)
+		require.NoError(t, err)
+		var body bytes.Buffer
+		_, err = body.Write(j)
+		require.NoError(t, err)
+		request := httptest.NewRequest("POST", "http://foo.example", &body)
+		runDefault, errJson := setInitialPublishBlockPostRequest(endpoint, nil, request)
+		require.Equal(t, true, errJson == nil)
+		assert.Equal(t, apimiddleware.RunDefault(true), runDefault)
+		assert.Equal(t, reflect.TypeOf(signedBeaconBlockEip4844ContainerJson{}).Name(), reflect.Indirect(reflect.ValueOf(endpoint.PostRequest)).Type().Name())
+	})
 }
 
 func TestPreparePublishedBlock(t *testing.T) {
@@ -459,6 +475,20 @@ func TestPreparePublishedBlock(t *testing.T) {
 		errJson := preparePublishedBlock(endpoint, nil, nil)
 		require.Equal(t, true, errJson == nil)
 		_, ok := endpoint.PostRequest.(*bellatrixPublishBlockRequestJson)
+		assert.Equal(t, true, ok)
+	})
+
+	t.Run("EIP-4844", func(t *testing.T) {
+		endpoint := &apimiddleware.Endpoint{
+			PostRequest: &signedBeaconBlockEip4844ContainerJson{
+				Message: &beaconBlockEip4844Json{
+					Body: &beaconBlockBodyEip4844Json{},
+				},
+			},
+		}
+		errJson := preparePublishedBlock(endpoint, nil, nil)
+		require.Equal(t, true, errJson == nil)
+		_, ok := endpoint.PostRequest.(*eip4844PublishBlockRequestJson)
 		assert.Equal(t, true, ok)
 	})
 
@@ -523,6 +553,21 @@ func TestSetInitialPublishBlindedBlockPostRequest(t *testing.T) {
 		assert.Equal(t, apimiddleware.RunDefault(true), runDefault)
 		assert.Equal(t, reflect.TypeOf(signedBlindedBeaconBlockBellatrixContainerJson{}).Name(), reflect.Indirect(reflect.ValueOf(endpoint.PostRequest)).Type().Name())
 	})
+	t.Run("EIP-4844", func(t *testing.T) {
+		slot, err := slots.EpochStart(params.BeaconConfig().Eip4844ForkEpoch)
+		require.NoError(t, err)
+		s.Message = struct{ Slot string }{Slot: strconv.FormatUint(uint64(slot), 10)}
+		j, err := json.Marshal(s)
+		require.NoError(t, err)
+		var body bytes.Buffer
+		_, err = body.Write(j)
+		require.NoError(t, err)
+		request := httptest.NewRequest("POST", "http://foo.example", &body)
+		runDefault, errJson := setInitialPublishBlindedBlockPostRequest(endpoint, nil, request)
+		require.Equal(t, true, errJson == nil)
+		assert.Equal(t, apimiddleware.RunDefault(true), runDefault)
+		assert.Equal(t, reflect.TypeOf(signedBlindedBeaconBlockEip4844ContainerJson{}).Name(), reflect.Indirect(reflect.ValueOf(endpoint.PostRequest)).Type().Name())
+	})
 }
 
 func TestPreparePublishedBlindedBlock(t *testing.T) {
@@ -565,6 +610,20 @@ func TestPreparePublishedBlindedBlock(t *testing.T) {
 		errJson := preparePublishedBlindedBlock(endpoint, nil, nil)
 		require.Equal(t, true, errJson == nil)
 		_, ok := endpoint.PostRequest.(*bellatrixPublishBlindedBlockRequestJson)
+		assert.Equal(t, true, ok)
+	})
+
+	t.Run("EIP-4844", func(t *testing.T) {
+		endpoint := &apimiddleware.Endpoint{
+			PostRequest: &signedBlindedBeaconBlockEip4844ContainerJson{
+				Message: &blindedBeaconBlockEip4844Json{
+					Body: &blindedBeaconBlockBodyEip4844Json{},
+				},
+			},
+		}
+		errJson := preparePublishedBlindedBlock(endpoint, nil, nil)
+		require.Equal(t, true, errJson == nil)
+		_, ok := endpoint.PostRequest.(*eip4844PublishBlindedBlockRequestJson)
 		assert.Equal(t, true, ok)
 	})
 
@@ -690,6 +749,36 @@ func TestSerializeV2Block(t *testing.T) {
 		require.NotNil(t, beaconBlock.Body)
 	})
 
+	t.Run("EIP-4844", func(t *testing.T) {
+		response := &blockV2ResponseJson{
+			Version: ethpbv2.Version_EIP4844.String(),
+			Data: &signedBeaconBlockContainerV2Json{
+				Eip4844Block: &beaconBlockEip4844Json{
+					Slot:          "1",
+					ProposerIndex: "1",
+					ParentRoot:    "root",
+					StateRoot:     "root",
+					Body:          &beaconBlockBodyEip4844Json{},
+				},
+				Signature: "sig",
+			},
+		}
+		runDefault, j, errJson := serializeV2Block(response)
+		require.Equal(t, nil, errJson)
+		require.Equal(t, apimiddleware.RunDefault(false), runDefault)
+		require.NotNil(t, j)
+		resp := &eip4844BlockResponseJson{}
+		require.NoError(t, json.Unmarshal(j, resp))
+		require.NotNil(t, resp.Data)
+		require.NotNil(t, resp.Data.Message)
+		beaconBlock := resp.Data.Message
+		assert.Equal(t, "1", beaconBlock.Slot)
+		assert.Equal(t, "1", beaconBlock.ProposerIndex)
+		assert.Equal(t, "root", beaconBlock.ParentRoot)
+		assert.Equal(t, "root", beaconBlock.StateRoot)
+		require.NotNil(t, beaconBlock.Body)
+	})
+
 	t.Run("incorrect response type", func(t *testing.T) {
 		response := &types.Empty{}
 		runDefault, j, errJson := serializeV2Block(response)
@@ -755,6 +844,21 @@ func TestSerializeV2State(t *testing.T) {
 		require.Equal(t, apimiddleware.RunDefault(false), runDefault)
 		require.NotNil(t, j)
 		require.NoError(t, json.Unmarshal(j, &bellatrixStateResponseJson{}))
+	})
+
+	t.Run("EIP-4844", func(t *testing.T) {
+		response := &beaconStateV2ResponseJson{
+			Version: ethpbv2.Version_EIP4844.String(),
+			Data: &beaconStateContainerV2Json{
+				Phase0State:  nil,
+				Eip4844State: &beaconStateEip4844Json{},
+			},
+		}
+		runDefault, j, errJson := serializeV2State(response)
+		require.Equal(t, nil, errJson)
+		require.Equal(t, apimiddleware.RunDefault(false), runDefault)
+		require.NotNil(t, j)
+		require.NoError(t, json.Unmarshal(j, &eip4844StateResponseJson{}))
 	})
 
 	t.Run("incorrect response type", func(t *testing.T) {
@@ -865,6 +969,35 @@ func TestSerializeProducedV2Block(t *testing.T) {
 		require.NotNil(t, beaconBlock.Body)
 	})
 
+	t.Run("EIP-4844", func(t *testing.T) {
+		response := &produceBlockResponseV2Json{
+			Version: ethpbv2.Version_EIP4844.String(),
+			Data: &beaconBlockContainerV2Json{
+				Eip4844Block: &beaconBlockEip4844Json{
+					Slot:          "1",
+					ProposerIndex: "1",
+					ParentRoot:    "root",
+					StateRoot:     "root",
+					Body:          &beaconBlockBodyEip4844Json{},
+				},
+			},
+		}
+		runDefault, j, errJson := serializeProducedV2Block(response)
+		require.Equal(t, nil, errJson)
+		require.Equal(t, apimiddleware.RunDefault(false), runDefault)
+		require.NotNil(t, j)
+		resp := &eip4844ProduceBlockResponseJson{}
+		require.NoError(t, json.Unmarshal(j, resp))
+		require.NotNil(t, resp.Data)
+		require.NotNil(t, resp.Data)
+		beaconBlock := resp.Data
+		assert.Equal(t, "1", beaconBlock.Slot)
+		assert.Equal(t, "1", beaconBlock.ProposerIndex)
+		assert.Equal(t, "root", beaconBlock.ParentRoot)
+		assert.Equal(t, "root", beaconBlock.StateRoot)
+		require.NotNil(t, beaconBlock.Body)
+	})
+
 	t.Run("incorrect response type", func(t *testing.T) {
 		response := &types.Empty{}
 		runDefault, j, errJson := serializeProducedV2Block(response)
@@ -964,6 +1097,35 @@ func TestSerializeProduceBlindedBlock(t *testing.T) {
 		require.Equal(t, apimiddleware.RunDefault(false), runDefault)
 		require.NotNil(t, j)
 		resp := &bellatrixProduceBlindedBlockResponseJson{}
+		require.NoError(t, json.Unmarshal(j, resp))
+		require.NotNil(t, resp.Data)
+		require.NotNil(t, resp.Data)
+		beaconBlock := resp.Data
+		assert.Equal(t, "1", beaconBlock.Slot)
+		assert.Equal(t, "1", beaconBlock.ProposerIndex)
+		assert.Equal(t, "root", beaconBlock.ParentRoot)
+		assert.Equal(t, "root", beaconBlock.StateRoot)
+		require.NotNil(t, beaconBlock.Body)
+	})
+
+	t.Run("EIP-4844", func(t *testing.T) {
+		response := &produceBlindedBlockResponseJson{
+			Version: ethpbv2.Version_EIP4844.String(),
+			Data: &blindedBeaconBlockContainerJson{
+				Eip4844Block: &blindedBeaconBlockEip4844Json{
+					Slot:          "1",
+					ProposerIndex: "1",
+					ParentRoot:    "root",
+					StateRoot:     "root",
+					Body:          &blindedBeaconBlockBodyEip4844Json{},
+				},
+			},
+		}
+		runDefault, j, errJson := serializeProducedBlindedBlock(response)
+		require.Equal(t, nil, errJson)
+		require.Equal(t, apimiddleware.RunDefault(false), runDefault)
+		require.NotNil(t, j)
+		resp := &eip4844ProduceBlindedBlockResponseJson{}
 		require.NoError(t, json.Unmarshal(j, resp))
 		require.NotNil(t, resp.Data)
 		require.NotNil(t, resp.Data)

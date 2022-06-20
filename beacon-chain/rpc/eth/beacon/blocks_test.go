@@ -158,6 +158,50 @@ func fillDBTestBlocksBellatrix(ctx context.Context, t *testing.T, beaconDB db.Da
 	return genBlk, blkContainers
 }
 
+func fillDBTestBlocksEip4844(ctx context.Context, t *testing.T, beaconDB db.Database) (*ethpbalpha.SignedBeaconBlockWithBlobKZGs, []*ethpbalpha.BeaconBlockContainer) {
+	parentRoot := [32]byte{1, 2, 3}
+	genBlk := util.NewBeaconBlockEip4844()
+	genBlk.Block.ParentRoot = parentRoot[:]
+	root, err := genBlk.Block.HashTreeRoot()
+	require.NoError(t, err)
+	signedBlk, err := wrapper.WrappedSignedBeaconBlock(genBlk)
+	require.NoError(t, err)
+	require.NoError(t, beaconDB.SaveBlock(ctx, signedBlk))
+	require.NoError(t, beaconDB.SaveGenesisBlockRoot(ctx, root))
+
+	count := types.Slot(100)
+	blks := make([]interfaces.SignedBeaconBlock, count)
+	blkContainers := make([]*ethpbalpha.BeaconBlockContainer, count)
+	for i := types.Slot(0); i < count; i++ {
+		b := util.NewBeaconBlockEip4844()
+		b.Block.Slot = i
+		b.Block.ParentRoot = bytesutil.PadTo([]byte{uint8(i)}, 32)
+		att1 := util.NewAttestation()
+		att1.Data.Slot = i
+		att1.Data.CommitteeIndex = types.CommitteeIndex(i)
+		att2 := util.NewAttestation()
+		att2.Data.Slot = i
+		att2.Data.CommitteeIndex = types.CommitteeIndex(i + 1)
+		b.Block.Body.Attestations = []*ethpbalpha.Attestation{att1, att2}
+		root, err := b.Block.HashTreeRoot()
+		require.NoError(t, err)
+		signedB, err := wrapper.WrappedSignedBeaconBlock(b)
+		require.NoError(t, err)
+		blks[i] = signedB
+		blkContainers[i] = &ethpbalpha.BeaconBlockContainer{
+			Block: &ethpbalpha.BeaconBlockContainer_Eip4844Block{Eip4844Block: b}, BlockRoot: root[:]}
+	}
+	require.NoError(t, beaconDB.SaveBlocks(ctx, blks))
+	headRoot := bytesutil.ToBytes32(blkContainers[len(blks)-1].BlockRoot)
+	summary := &ethpbalpha.StateSummary{
+		Root: headRoot[:],
+		Slot: blkContainers[len(blks)-1].Block.(*ethpbalpha.BeaconBlockContainer_Eip4844Block).Eip4844Block.Block.Slot,
+	}
+	require.NoError(t, beaconDB.SaveStateSummary(ctx, summary))
+	require.NoError(t, beaconDB.SaveHeadBlockRoot(ctx, headRoot))
+	return genBlk, blkContainers
+}
+
 func TestServer_GetBlockHeader(t *testing.T) {
 	beaconDB := dbTest.SetupDB(t)
 	ctx := context.Background()
@@ -561,6 +605,48 @@ func TestServer_SubmitBlock_OK(t *testing.T) {
 		_, err = beaconChainServer.SubmitBlock(context.Background(), blockReq)
 		assert.NoError(t, err, "Could not propose block correctly")
 	})
+
+	t.Run("EIP-4844", func(t *testing.T) {
+		beaconDB := dbTest.SetupDB(t)
+		ctx := context.Background()
+
+		genesis := util.NewBeaconBlockEip4844()
+		wrapped, err := wrapper.WrappedSignedBeaconBlock(genesis)
+		require.NoError(t, err)
+		require.NoError(t, beaconDB.SaveBlock(context.Background(), wrapped), "Could not save genesis block")
+
+		numDeposits := uint64(64)
+		beaconState, _ := util.DeterministicGenesisState(t, numDeposits)
+		bsRoot, err := beaconState.HashTreeRoot(ctx)
+		require.NoError(t, err)
+		genesisRoot, err := genesis.Block.HashTreeRoot()
+		require.NoError(t, err)
+		require.NoError(t, beaconDB.SaveState(ctx, beaconState, genesisRoot), "Could not save genesis state")
+
+		c := &mock.ChainService{Root: bsRoot[:], State: beaconState}
+		beaconChainServer := &Server{
+			BeaconDB:         beaconDB,
+			BlockReceiver:    c,
+			ChainInfoFetcher: c,
+			BlockNotifier:    c.BlockNotifier(),
+			Broadcaster:      mockp2p.NewTestP2P(t),
+			HeadFetcher:      c,
+		}
+		req := util.NewBeaconBlockEip4844()
+		req.Block.Slot = 5
+		req.Block.ParentRoot = bsRoot[:]
+		v2Block, err := migration.V1Alpha1BeaconBlockEip4844ToV2(req.Block)
+		require.NoError(t, err)
+		wrapped, err = wrapper.WrappedSignedBeaconBlock(req)
+		require.NoError(t, err)
+		require.NoError(t, beaconDB.SaveBlock(ctx, wrapped))
+		blockReq := &ethpbv2.SignedBeaconBlockContainerV2{
+			Message:   &ethpbv2.SignedBeaconBlockContainerV2_Eip4844Block{Eip4844Block: v2Block},
+			Signature: req.Signature,
+		}
+		_, err = beaconChainServer.SubmitBlock(context.Background(), blockReq)
+		assert.NoError(t, err, "Could not propose block correctly")
+	})
 }
 
 func TestServer_SubmitBlockSSZ_OK(t *testing.T) {
@@ -698,6 +784,57 @@ func TestServer_SubmitBlockSSZ_OK(t *testing.T) {
 		}
 		md := metadata.MD{}
 		md.Set(versionHeader, "bellatrix")
+		sszCtx := metadata.NewIncomingContext(ctx, md)
+		_, err = beaconChainServer.SubmitBlockSSZ(sszCtx, blockReq)
+		assert.NoError(t, err, "Could not propose block correctly")
+	})
+
+	t.Run("EIP-4844", func(t *testing.T) {
+		// INFO: This code block can be removed once Bellatrix
+		// fork epoch is set to a value other than math.MaxUint64
+		cfg := params.BeaconConfig()
+		cfg.Eip4844ForkEpoch = cfg.BellatrixForkEpoch + 1000
+		cfg.ForkVersionSchedule[bytesutil.ToBytes4(cfg.Eip4844ForkVersion)] = cfg.BellatrixForkEpoch + 1000
+		params.OverrideBeaconConfig(cfg)
+
+		beaconDB := dbTest.SetupDB(t)
+		ctx := context.Background()
+
+		genesis := util.NewBeaconBlockEip4844()
+		wrapped, err := wrapper.WrappedSignedBeaconBlock(genesis)
+		require.NoError(t, err)
+		require.NoError(t, beaconDB.SaveBlock(context.Background(), wrapped), "Could not save genesis block")
+
+		numDeposits := uint64(64)
+		beaconState, _ := util.DeterministicGenesisState(t, numDeposits)
+		bsRoot, err := beaconState.HashTreeRoot(ctx)
+		require.NoError(t, err)
+		genesisRoot, err := genesis.Block.HashTreeRoot()
+		require.NoError(t, err)
+		require.NoError(t, beaconDB.SaveState(ctx, beaconState, genesisRoot), "Could not save genesis state")
+
+		c := &mock.ChainService{Root: bsRoot[:], State: beaconState}
+		beaconChainServer := &Server{
+			BeaconDB:         beaconDB,
+			BlockReceiver:    c,
+			ChainInfoFetcher: c,
+			BlockNotifier:    c.BlockNotifier(),
+			Broadcaster:      mockp2p.NewTestP2P(t),
+			HeadFetcher:      c,
+		}
+		req := util.NewBeaconBlockEip4844()
+		req.Block.Slot = params.BeaconConfig().SlotsPerEpoch.Mul(uint64(params.BeaconConfig().Eip4844ForkEpoch))
+		req.Block.ParentRoot = bsRoot[:]
+		wrapped, err = wrapper.WrappedSignedBeaconBlock(req)
+		require.NoError(t, err)
+		require.NoError(t, beaconDB.SaveBlock(ctx, wrapped))
+		blockSsz, err := req.MarshalSSZ()
+		require.NoError(t, err)
+		blockReq := &ethpbv2.SSZContainer{
+			Data: blockSsz,
+		}
+		md := metadata.MD{}
+		md.Set(versionHeader, "eip4844")
 		sszCtx := metadata.NewIncomingContext(ctx, md)
 		_, err = beaconChainServer.SubmitBlockSSZ(sszCtx, blockReq)
 		assert.NoError(t, err, "Could not propose block correctly")
@@ -844,6 +981,58 @@ func TestServer_SubmitBlindedBlockSSZ_OK(t *testing.T) {
 		_, err = beaconChainServer.SubmitBlindedBlockSSZ(sszCtx, blockReq)
 		assert.NoError(t, err, "Could not propose block correctly")
 	})
+
+	t.Run("EIP-4844", func(t *testing.T) {
+		// INFO: This code block can be removed once Bellatrix
+		// fork epoch is set to a value other than math.MaxUint64
+		params.SetupTestConfigCleanup(t)
+		cfg := params.BeaconConfig()
+		cfg.Eip4844ForkEpoch = cfg.BellatrixForkEpoch + 1000
+		cfg.ForkVersionSchedule[bytesutil.ToBytes4(cfg.Eip4844ForkVersion)] = cfg.BellatrixForkEpoch + 1000
+		params.OverrideBeaconConfig(cfg)
+
+		beaconDB := dbTest.SetupDB(t)
+		ctx := context.Background()
+
+		genesis := util.NewBeaconBlockEip4844()
+		wrapped, err := wrapper.WrappedSignedBeaconBlock(genesis)
+		require.NoError(t, err)
+		require.NoError(t, beaconDB.SaveBlock(context.Background(), wrapped), "Could not save genesis block")
+
+		numDeposits := uint64(64)
+		beaconState, _ := util.DeterministicGenesisState(t, numDeposits)
+		bsRoot, err := beaconState.HashTreeRoot(ctx)
+		require.NoError(t, err)
+		genesisRoot, err := genesis.Block.HashTreeRoot()
+		require.NoError(t, err)
+		require.NoError(t, beaconDB.SaveState(ctx, beaconState, genesisRoot), "Could not save genesis state")
+
+		c := &mock.ChainService{Root: bsRoot[:], State: beaconState}
+		beaconChainServer := &Server{
+			BeaconDB:         beaconDB,
+			BlockReceiver:    c,
+			ChainInfoFetcher: c,
+			BlockNotifier:    c.BlockNotifier(),
+			Broadcaster:      mockp2p.NewTestP2P(t),
+			HeadFetcher:      c,
+		}
+		req := util.NewBlindedBeaconBlockEip4844()
+		req.Block.Slot = params.BeaconConfig().SlotsPerEpoch.Mul(uint64(params.BeaconConfig().BellatrixForkEpoch))
+		req.Block.ParentRoot = bsRoot[:]
+		wrapped, err = wrapper.WrappedSignedBeaconBlock(req)
+		require.NoError(t, err)
+		require.NoError(t, beaconDB.SaveBlock(ctx, wrapped))
+		blockSsz, err := req.MarshalSSZ()
+		require.NoError(t, err)
+		blockReq := &ethpbv2.SSZContainer{
+			Data: blockSsz,
+		}
+		md := metadata.MD{}
+		md.Set(versionHeader, "bellatrix")
+		sszCtx := metadata.NewIncomingContext(ctx, md)
+		_, err = beaconChainServer.SubmitBlindedBlockSSZ(sszCtx, blockReq)
+		assert.NoError(t, err, "Could not propose block correctly")
+	})
 }
 
 func TestSubmitBlindedBlock(t *testing.T) {
@@ -973,6 +1162,56 @@ func TestSubmitBlindedBlock(t *testing.T) {
 
 		blockReq := &ethpbv2.SignedBlindedBeaconBlockContainer{
 			Message:   &ethpbv2.SignedBlindedBeaconBlockContainer_BellatrixBlock{BellatrixBlock: blindedBlk.Message},
+			Signature: blindedBlk.Signature,
+		}
+		_, err = beaconChainServer.SubmitBlindedBlock(context.Background(), blockReq)
+		assert.NoError(t, err)
+	})
+
+	t.Run("EIP-4844", func(t *testing.T) {
+		transactions := [][]byte{[]byte("transaction1"), []byte("transaction2")}
+		transactionsRoot, err := ssz.TransactionsRoot(transactions)
+		require.NoError(t, err)
+
+		beaconDB := dbTest.SetupDB(t)
+		ctx := context.Background()
+
+		genesis := util.NewBeaconBlockEip4844()
+		wrapped, err := wrapper.WrappedSignedBeaconBlock(genesis)
+		require.NoError(t, err)
+		require.NoError(t, beaconDB.SaveBlock(context.Background(), wrapped), "Could not save genesis block")
+
+		numDeposits := uint64(64)
+		beaconState, _ := util.DeterministicGenesisState(t, numDeposits)
+		bsRoot, err := beaconState.HashTreeRoot(ctx)
+		require.NoError(t, err)
+		genesisRoot, err := genesis.Block.HashTreeRoot()
+		require.NoError(t, err)
+		require.NoError(t, beaconDB.SaveState(ctx, beaconState, genesisRoot), "Could not save genesis state")
+
+		c := &mock.ChainService{Root: bsRoot[:], State: beaconState}
+		beaconChainServer := &Server{
+			BeaconDB:         beaconDB,
+			BlockReceiver:    c,
+			ChainInfoFetcher: c,
+			BlockNotifier:    c.BlockNotifier(),
+			Broadcaster:      mockp2p.NewTestP2P(t),
+		}
+
+		blk := util.NewBeaconBlockEip4844()
+		blk.Block.Slot = 5
+		blk.Block.ParentRoot = bsRoot[:]
+		blk.Block.Body.ExecutionPayload.Transactions = transactions
+		blindedBlk := util.NewBlindedBeaconBlockEip4844V2()
+		blindedBlk.Message.Slot = 5
+		blindedBlk.Message.ParentRoot = bsRoot[:]
+		blindedBlk.Message.Body.ExecutionPayloadHeader.TransactionsRoot = transactionsRoot[:]
+		wrapped, err = wrapper.WrappedSignedBeaconBlock(blk)
+		require.NoError(t, err)
+		require.NoError(t, beaconDB.SaveBlock(ctx, wrapped))
+
+		blockReq := &ethpbv2.SignedBlindedBeaconBlockContainer{
+			Message:   &ethpbv2.SignedBlindedBeaconBlockContainer_Eip4844Block{Eip4844Block: blindedBlk.Message},
 			Signature: blindedBlk.Signature,
 		}
 		_, err = beaconChainServer.SubmitBlindedBlock(context.Background(), blockReq)
@@ -1456,6 +1695,126 @@ func TestServer_GetBlockV2(t *testing.T) {
 		}
 	})
 
+	t.Run("EIP-4844", func(t *testing.T) {
+		beaconDB := dbTest.SetupDB(t)
+		ctx := context.Background()
+
+		_, blkContainers := fillDBTestBlocksEip4844(ctx, t, beaconDB)
+		headBlock := blkContainers[len(blkContainers)-1]
+
+		b2 := util.NewBeaconBlockEip4844()
+		b2.Block.Slot = 30
+		b2.Block.ParentRoot = bytesutil.PadTo([]byte{1}, 32)
+		signedBlk, err := wrapper.WrappedSignedBeaconBlock(b2)
+		require.NoError(t, err)
+		require.NoError(t, beaconDB.SaveBlock(ctx, signedBlk))
+		b3 := util.NewBeaconBlockEip4844()
+		b3.Block.Slot = 30
+		b3.Block.ParentRoot = bytesutil.PadTo([]byte{4}, 32)
+		signedBlk, err = wrapper.WrappedSignedBeaconBlock(b2)
+		require.NoError(t, err)
+		require.NoError(t, beaconDB.SaveBlock(ctx, signedBlk))
+
+		chainBlk, err := wrapper.WrappedSignedBeaconBlock(headBlock.GetEip4844Block())
+		require.NoError(t, err)
+		mockChainService := &mock.ChainService{
+			DB:                  beaconDB,
+			Block:               chainBlk,
+			Root:                headBlock.BlockRoot,
+			FinalizedCheckPoint: &ethpbalpha.Checkpoint{Root: blkContainers[64].BlockRoot},
+		}
+		bs := &Server{
+			BeaconDB:              beaconDB,
+			ChainInfoFetcher:      mockChainService,
+			HeadFetcher:           mockChainService,
+			OptimisticModeFetcher: mockChainService,
+		}
+
+		genBlk, blkContainers := fillDBTestBlocksEip4844(ctx, t, beaconDB)
+		root, err := genBlk.Block.HashTreeRoot()
+		require.NoError(t, err)
+
+		tests := []struct {
+			name    string
+			blockID []byte
+			want    *ethpbalpha.SignedBeaconBlockWithBlobKZGs
+			wantErr bool
+		}{
+			{
+				name:    "slot",
+				blockID: []byte("30"),
+				want:    blkContainers[30].GetEip4844Block(),
+			},
+			{
+				name:    "bad formatting",
+				blockID: []byte("3bad0"),
+				wantErr: true,
+			},
+			{
+				name:    "canonical",
+				blockID: []byte("30"),
+				want:    blkContainers[30].GetEip4844Block(),
+			},
+			{
+				name:    "head",
+				blockID: []byte("head"),
+				want:    headBlock.GetEip4844Block(),
+			},
+			{
+				name:    "finalized",
+				blockID: []byte("finalized"),
+				want:    blkContainers[64].GetEip4844Block(),
+			},
+			{
+				name:    "genesis",
+				blockID: []byte("genesis"),
+				want:    genBlk,
+			},
+			{
+				name:    "genesis root",
+				blockID: root[:],
+				want:    genBlk,
+			},
+			{
+				name:    "root",
+				blockID: blkContainers[20].BlockRoot,
+				want:    blkContainers[20].GetEip4844Block(),
+			},
+			{
+				name:    "non-existent root",
+				blockID: bytesutil.PadTo([]byte("hi there"), 32),
+				wantErr: true,
+			},
+			{
+				name:    "no block",
+				blockID: []byte("105"),
+				wantErr: true,
+			},
+		}
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				blk, err := bs.GetBlockV2(ctx, &ethpbv2.BlockRequestV2{
+					BlockId: tt.blockID,
+				})
+				if tt.wantErr {
+					require.NotEqual(t, err, nil)
+					return
+				}
+				require.NoError(t, err)
+
+				v2Block, err := migration.V1Alpha1BeaconBlockEip4844ToV2(tt.want.Block)
+				require.NoError(t, err)
+
+				b, ok := blk.Data.Message.(*ethpbv2.SignedBeaconBlockContainerV2_Eip4844Block)
+				require.Equal(t, true, ok)
+				if !reflect.DeepEqual(b.Eip4844Block, v2Block) {
+					t.Error("Expected blocks to equal")
+				}
+				assert.Equal(t, ethpbv2.Version_EIP4844, blk.Version)
+			})
+		}
+	})
+
 	t.Run("execution optimistic", func(t *testing.T) {
 		beaconDB := dbTest.SetupDB(t)
 		ctx := context.Background()
@@ -1656,6 +2015,45 @@ func TestServer_GetBlockSSZV2(t *testing.T) {
 		assert.NotNil(t, resp)
 		assert.DeepEqual(t, sszBlock, resp.Data)
 		assert.Equal(t, ethpbv2.Version_BELLATRIX, resp.Version)
+	})
+
+	t.Run("EIP-4844", func(t *testing.T) {
+		beaconDB := dbTest.SetupDB(t)
+		ctx := context.Background()
+
+		_, blkContainers := fillDBTestBlocksEip4844(ctx, t, beaconDB)
+		headBlock := blkContainers[len(blkContainers)-1]
+
+		b2 := util.NewBeaconBlockEip4844()
+		b2.Block.Slot = 30
+		b2.Block.ParentRoot = bytesutil.PadTo([]byte{1}, 32)
+		signedBlk, err := wrapper.WrappedSignedBeaconBlock(b2)
+		require.NoError(t, err)
+		require.NoError(t, beaconDB.SaveBlock(ctx, signedBlk))
+
+		chainBlk, err := wrapper.WrappedSignedBeaconBlock(headBlock.GetEip4844Block())
+		require.NoError(t, err)
+		bs := &Server{
+			BeaconDB: beaconDB,
+			ChainInfoFetcher: &mock.ChainService{
+				DB:                  beaconDB,
+				Block:               chainBlk,
+				Root:                headBlock.BlockRoot,
+				FinalizedCheckPoint: &ethpbalpha.Checkpoint{Root: blkContainers[64].BlockRoot},
+			},
+		}
+
+		ok, blocks, err := beaconDB.BlocksBySlot(ctx, 30)
+		require.Equal(t, true, ok)
+		require.NoError(t, err)
+		sszBlock, err := blocks[0].MarshalSSZ()
+		require.NoError(t, err)
+
+		resp, err := bs.GetBlockSSZV2(ctx, &ethpbv2.BlockRequestV2{BlockId: []byte("30")})
+		require.NoError(t, err)
+		assert.NotNil(t, resp)
+		assert.DeepEqual(t, sszBlock, resp.Data)
+		assert.Equal(t, ethpbv2.Version_EIP4844, resp.Version)
 	})
 }
 
@@ -2093,6 +2491,109 @@ func TestServer_ListBlockAttestations(t *testing.T) {
 				require.NoError(t, err)
 
 				v1Block, err := migration.V1Alpha1BeaconBlockBellatrixToV2(tt.want.Block)
+				require.NoError(t, err)
+
+				if !reflect.DeepEqual(blk.Data, v1Block.Body.Attestations) {
+					t.Error("Expected attestations to equal")
+				}
+			})
+		}
+	})
+
+	t.Run("EIP-4844", func(t *testing.T) {
+		beaconDB := dbTest.SetupDB(t)
+		ctx := context.Background()
+
+		_, blkContainers := fillDBTestBlocksEip4844(ctx, t, beaconDB)
+		headBlock := blkContainers[len(blkContainers)-1]
+		blk, err := wrapper.WrappedSignedBeaconBlock(headBlock.Block.(*ethpbalpha.BeaconBlockContainer_Eip4844Block).Eip4844Block)
+		require.NoError(t, err)
+		mockChainService := &mock.ChainService{
+			DB:                  beaconDB,
+			Block:               blk,
+			Root:                headBlock.BlockRoot,
+			FinalizedCheckPoint: &ethpbalpha.Checkpoint{Root: blkContainers[64].BlockRoot},
+		}
+		bs := &Server{
+			BeaconDB:              beaconDB,
+			ChainInfoFetcher:      mockChainService,
+			HeadFetcher:           mockChainService,
+			OptimisticModeFetcher: mockChainService,
+		}
+
+		genBlk, blkContainers := fillDBTestBlocksEip4844(ctx, t, beaconDB)
+		root, err := genBlk.Block.HashTreeRoot()
+		require.NoError(t, err)
+
+		tests := []struct {
+			name    string
+			blockID []byte
+			want    *ethpbalpha.SignedBeaconBlockWithBlobKZGs
+			wantErr bool
+		}{
+			{
+				name:    "slot",
+				blockID: []byte("30"),
+				want:    blkContainers[30].Block.(*ethpbalpha.BeaconBlockContainer_Eip4844Block).Eip4844Block,
+			},
+			{
+				name:    "bad formatting",
+				blockID: []byte("3bad0"),
+				wantErr: true,
+			},
+			{
+				name:    "head",
+				blockID: []byte("head"),
+				want:    headBlock.Block.(*ethpbalpha.BeaconBlockContainer_Eip4844Block).Eip4844Block,
+			},
+			{
+				name:    "finalized",
+				blockID: []byte("finalized"),
+				want:    blkContainers[64].Block.(*ethpbalpha.BeaconBlockContainer_Eip4844Block).Eip4844Block,
+			},
+			{
+				name:    "genesis",
+				blockID: []byte("genesis"),
+				want:    genBlk,
+			},
+			{
+				name:    "genesis root",
+				blockID: root[:],
+				want:    genBlk,
+			},
+			{
+				name:    "root",
+				blockID: blkContainers[20].BlockRoot,
+				want:    blkContainers[20].Block.(*ethpbalpha.BeaconBlockContainer_Eip4844Block).Eip4844Block,
+			},
+			{
+				name:    "non-existent root",
+				blockID: bytesutil.PadTo([]byte("hi there"), 32),
+				wantErr: true,
+			},
+			{
+				name:    "slot",
+				blockID: []byte("40"),
+				want:    blkContainers[40].Block.(*ethpbalpha.BeaconBlockContainer_Eip4844Block).Eip4844Block,
+			},
+			{
+				name:    "no block",
+				blockID: []byte("105"),
+				wantErr: true,
+			},
+		}
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				blk, err := bs.ListBlockAttestations(ctx, &ethpbv1.BlockRequest{
+					BlockId: tt.blockID,
+				})
+				if tt.wantErr {
+					require.NotEqual(t, err, nil)
+					return
+				}
+				require.NoError(t, err)
+
+				v1Block, err := migration.V1Alpha1BeaconBlockEip4844ToV2(tt.want.Block)
 				require.NoError(t, err)
 
 				if !reflect.DeepEqual(blk.Data, v1Block.Body.Attestations) {
