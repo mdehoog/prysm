@@ -61,6 +61,8 @@ github.com/BurntSushi/toml v0.3.1 h1:WXkYYl6Yr3qBf1K79EBnL4mak0OimBfB0XUf9Vl28OQ
 github.com/BurntSushi/toml v0.3.1/go.mod h1:xHWCNGjB5oqiDr8zfno3MHue2Ht5sIBksp03qcyfWMU=
 github.com/BurntSushi/xgb v0.0.0-20160522181843-27f122750802/go.mod h1:IVnqGOEym/WlBOVXweHU+Q+/VP0lqqI8lqeDx9IjBqo=
 github.com/DATA-DOG/go-sqlmock v1.3.3/go.mod h1:f/Ixk793poVmq4qj/V1dPUg2JEAKC73Q5eFN3EC/SaM=
+github.com/Inphi/go-ethereum v1.10.8-0.20220712175938-ac93c7579658 h1:SkFf+sfiafcPsoWL9yUZSx8i1gZn5wzMnxb4Tek1l0k=
+github.com/Inphi/go-ethereum v1.10.8-0.20220712175938-ac93c7579658/go.mod h1:cjChpXkJmjQoRaAabUBBeGN7c2psFa4dJcvj01wYEm4=
 github.com/Knetic/govaluate v3.0.1-0.20171022003610-9aa49832a739+incompatible/go.mod h1:r7JcOSlj0wfOMncg0iLm8Leh48TZaKVeNIfJntJ2wa0=
 github.com/MariusVanDerWijden/FuzzyVM v0.0.0-20210904205340-da82a0d3e27a/go.mod h1:iKT2vQyFJT+f8rXja6l58k8hv0gLvNx9C23FITcSP8E=
 github.com/MariusVanDerWijden/FuzzyVM v0.0.0-20220304110512-764253afa8c2 h1:HKOeocqWNWitsHPVPdCUJRalFmDNVHs2xTKmse4svwU=
@@ -891,8 +893,6 @@ github.com/mattn/go-sqlite3 v1.11.0/go.mod h1:FPy6KqzDD04eiIsT53CuJW3U88zkxoIYsO
 github.com/mattn/go-tty v0.0.0-20180907095812-13ff1204f104/go.mod h1:XPvLUNfbS4fJH25nqRHfWLMa1ONC8Amw+mIA639KxkE=
 github.com/matttproud/golang_protobuf_extensions v1.0.1 h1:4hp9jkHxhMHkqkrB3Ix0jegS5sx/RkqARlsWZ6pIwiU=
 github.com/matttproud/golang_protobuf_extensions v1.0.1/go.mod h1:D8He9yQNgCq6Z5Ld7szi9bcBfOoFv/3dc6xSMkL2PC0=
-github.com/mdehoog/go-ethereum v1.10.19-0.20220607211042-6d4820c91805 h1:xrZtQ0tUH1w+JcNuUbHdJfUgqZIz31lE2Ps0dhMZH1U=
-github.com/mdehoog/go-ethereum v1.10.19-0.20220607211042-6d4820c91805/go.mod h1:cjChpXkJmjQoRaAabUBBeGN7c2psFa4dJcvj01wYEm4=
 github.com/mgutz/ansi v0.0.0-20170206155736-9520e82c474b h1:j7+1HpAFS1zy5+Q4qx1fWh90gTKwiN4QCGoY9TWyyO4=
 github.com/mgutz/ansi v0.0.0-20170206155736-9520e82c474b/go.mod h1:01TrycV0kFyexm33Z7vhZRXopbI8J3TDReVlkTgMUxE=
 github.com/microcosm-cc/bluemonday v1.0.1/go.mod h1:hsXNsILzKxV+sX77C5b8FSuKF00vh2OMYv+xgHpAMF4=

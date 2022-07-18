@@ -285,4 +285,4 @@ replace github.com/grpc-ecosystem/grpc-gateway/v2 => github.com/prysmaticlabs/gr
 replace github.com/ferranbt/fastssz => github.com/prysmaticlabs/fastssz v0.0.0-20220602201051-e406b8091121
 
 // For eip-4844 types
-replace github.com/ethereum/go-ethereum => github.com/mdehoog/go-ethereum v1.10.19-0.20220607211042-6d4820c91805
+replace github.com/ethereum/go-ethereum => github.com/Inphi/go-ethereum v1.10.8-0.20220712175938-ac93c7579658
