@@ -20,7 +20,7 @@ var (
 	ErrMissmatchKzgs              = errors.New("missmatch kzgs")
 )
 
-// VerifyBlobsSidecar verifies the integrity of a sidecar.
+// ValidateBlobsSidecar verifies the integrity of a sidecar.
 // def verify_blobs_sidecar(slot: Slot, beacon_block_root: Root,
 //                         expected_kzgs: Sequence[KZGCommitment], blobs_sidecar: BlobsSidecar):
 //    assert slot == blobs_sidecar.beacon_block_slot
@@ -29,18 +29,18 @@ var (
 //    assert len(expected_kzgs) == len(blobs)
 //    for kzg, blob in zip(expected_kzgs, blobs):
 //        assert blob_to_kzg(blob) == kzg
-func VerifyBlobsSidecar(slot types.Slot, beaconBlockRoot [32]byte, expectedKZGs [][]byte, blobsSidecar *eth.BlobsSidecar) error {
+func ValidateBlobsSidecar(slot types.Slot, beaconBlockRoot [32]byte, expectedKZGCommitments [][]byte, blobsSidecar *eth.BlobsSidecar) error {
 	if slot != blobsSidecar.BeaconBlockSlot {
 		return ErrInvalidBlobSlot
 	}
 	if beaconBlockRoot != bytesutil.ToBytes32(blobsSidecar.BeaconBlockRoot) {
 		return ErrInvalidBlobBeaconBlockRoot
 	}
-	if len(expectedKZGs) != len(blobsSidecar.Blobs) {
+	if len(expectedKZGCommitments) != len(blobsSidecar.Blobs) {
 		return ErrInvalidBlobsLength
 	}
 
-	aggregatedPoly, aggregatedPolyCommitment, err := computeAggregatedPolyAndCommitment(blobsSidecar.Blobs, expectedKZGs)
+	aggregatedPoly, aggregatedPolyCommitment, err := computeAggregatedPolyAndCommitment(blobsSidecar.Blobs, expectedKZGCommitments)
 	if err != nil {
 		return err
 	}
