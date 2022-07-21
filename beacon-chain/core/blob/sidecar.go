@@ -78,9 +78,9 @@ func computeAggregatedPolyAndCommitment(blobs []*v1.Blob, kzgCommitments [][]byt
 }
 
 func hashToBLSField(blobs []*v1.Blob, expectedKZGs [][]byte) (BLSFieldElement, error) {
-	bwk := eth.BlobsWithKzgs{
-		Blobs: blobs,
-		Kzgs:  expectedKZGs,
+	bwk := eth.BlobsAndCommitments{
+		Blobs:          blobs,
+		KzgCommitments: expectedKZGs,
 	}
 	htr, err := bwk.HashTreeRoot()
 	if err != nil {
@@ -92,9 +92,9 @@ func hashToBLSField(blobs []*v1.Blob, expectedKZGs [][]byte) (BLSFieldElement, e
 }
 
 func hashToBLSField2(poly []BLSFieldElement, commitment KZGCommitment) (BLSFieldElement, error) {
-	ap := eth.AggregatedPoly{
-		AggregatedPoly:           BLSFieldElementsToBytes(poly),
-		AggregatedPolyCommitment: commitment[:],
+	ap := eth.PolynomialAndCommitment{
+		Polynomial:    BLSFieldElementsToBytes(poly),
+		KzgCommitment: commitment[:],
 	}
 	htr, err := ap.HashTreeRoot()
 	if err != nil {

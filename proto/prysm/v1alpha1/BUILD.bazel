@@ -121,8 +121,8 @@ ssz_gen_marshal(
         "Blob",
         "BlobsSidecar",
         "SignedBlobsSidecar",
-        "BlobsWithKzgs",
-        "AggregatedPoly",
+        "BlobsAndCommitments",
+        "PolynomialAndCommitment",
         "BlobsSidecarsByRangeRequest",
     ],
 )
