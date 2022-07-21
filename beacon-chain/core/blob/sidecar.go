@@ -39,20 +39,8 @@ func VerifyBlobsSidecar(slot types.Slot, beaconBlockRoot [32]byte, expectedKZGs 
 	if len(expectedKZGs) != len(blobsSidecar.Blobs) {
 		return ErrInvalidBlobsLength
 	}
-	r, err := hashToBLSField(blobsSidecar.Blobs, expectedKZGs)
-	if err != nil {
-		return err
-	}
-	rPowers := computePowers(r, len(expectedKZGs))
 
-	kzgs := KZGsFromBytesArray(expectedKZGs)
-	aggregatedPolyCommitment, err := lincomb(kzgs, rPowers)
-	if err != nil {
-		return err
-	}
-
-	blobs := BlobsToBLSFieldElements(blobsSidecar.Blobs)
-	aggregatedPoly, err := vectorLincomb(blobs, rPowers)
+	aggregatedPoly, aggregatedPolyCommitment, err := computeAggregatedPolyAndCommitment(blobsSidecar.Blobs, expectedKZGs)
 	if err != nil {
 		return err
 	}
@@ -65,6 +53,28 @@ func VerifyBlobsSidecar(slot types.Slot, beaconBlockRoot [32]byte, expectedKZGs 
 	y, err := evaluatePolynomialInEvaluationForm(aggregatedPoly, x)
 
 	return verifyKZGProof(aggregatedPolyCommitment, x, y, blobsSidecar.AggregatedProof)
+}
+
+func computeAggregatedPolyAndCommitment(blobs []*v1.Blob, kzgCommitments [][]byte) ([]BLSFieldElement, KZGCommitment, error) {
+	r, err := hashToBLSField(blobs, kzgCommitments)
+	if err != nil {
+		return nil, KZGCommitment{}, err
+	}
+	rPowers := computePowers(r, len(kzgCommitments))
+
+	blobsBLS := BlobsToBLSFieldElements(blobs)
+	aggregatedPoly, err := matrixLincomb(blobsBLS, rPowers)
+	if err != nil {
+		return nil, KZGCommitment{}, err
+	}
+
+	kzgs := KZGsFromBytesArray(kzgCommitments)
+	aggregatedPolyCommitment, err := lincomb(kzgs, rPowers)
+	if err != nil {
+		return nil, KZGCommitment{}, err
+	}
+
+	return aggregatedPoly, aggregatedPolyCommitment, nil
 }
 
 func hashToBLSField(blobs []*v1.Blob, expectedKZGs [][]byte) (BLSFieldElement, error) {
@@ -129,7 +139,7 @@ func lincomb(vectors []KZGCommitment, scalars []BLSFieldElement) (KZGCommitment,
 	return r, nil
 }
 
-func vectorLincomb(vectors [][]BLSFieldElement, scalars []BLSFieldElement) ([]BLSFieldElement, error) {
+func matrixLincomb(vectors [][]BLSFieldElement, scalars []BLSFieldElement) ([]BLSFieldElement, error) {
 	if len(vectors) != len(scalars) {
 		return nil, errors.New("vectors and scalar vectors should be the same length")
 	}
